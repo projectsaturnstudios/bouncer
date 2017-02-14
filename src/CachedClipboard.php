@@ -3,14 +3,13 @@
 namespace Silber\Bouncer;
 
 use Silber\Bouncer\Database\Models;
-use Silber\Bouncer\Contracts\CachedClipboard as CachedClipboardContract;
 
 use Illuminate\Cache\TaggedCache;
 use Illuminate\Contracts\Cache\Store;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Collection;
 
-class CachedClipboard extends Clipboard implements CachedClipboardContract
+class CachedClipboard extends Clipboard
 {
     /**
      * The tag used for caching.
@@ -64,21 +63,20 @@ class CachedClipboard extends Clipboard implements CachedClipboardContract
     }
 
     /**
-     * Get the given authority's abilities.
+     * Get the given user's abilities.
      *
-     * @param  \Illuminate\Database\Eloquent\Model  $authority
-     * @param  bool  $allowed
+     * @param  \Illuminate\Database\Eloquent\Model  $user
      * @return \Illuminate\Database\Eloquent\Collection
      */
-    public function getAbilities(Model $authority, $allowed = true)
+    public function getAbilities(Model $user)
     {
-        $key = $this->getCacheKey($authority, 'abilities', $allowed);
+        $key = $this->tag.'-abilities-'.$user->getKey();
 
-        if (is_array($abilities = $this->cache->get($key))) {
+        if ($abilities = $this->cache->get($key)) {
             return $this->deserializeAbilities($abilities);
         }
 
-        $abilities = $this->getFreshAbilities($authority, $allowed);
+        $abilities = parent::getAbilities($user);
 
         $this->cache->forever($key, $this->serializeAbilities($abilities));
 
@@ -86,117 +84,72 @@ class CachedClipboard extends Clipboard implements CachedClipboardContract
     }
 
     /**
-     * Get a fresh copy of the given authority's abilities.
+     * Get the given user's roles.
      *
-     * @param  \Illuminate\Database\Eloquent\Model  $authority
-     * @param  bool  $allowed
-     * @return \Illuminate\Database\Eloquent\Collection
-     */
-    public function getFreshAbilities(Model $authority, $allowed)
-    {
-        return parent::getAbilities($authority, $allowed);
-    }
-
-    /**
-     * Get the given authority's roles.
-     *
-     * @param  \Illuminate\Database\Eloquent\Model  $authority
+     * @param  \Illuminate\Database\Eloquent\Model  $user
      * @return \Illuminate\Support\Collection
      */
-    public function getRoles(Model $authority)
+    public function getRoles(Model $user)
     {
-        $key = $this->getCacheKey($authority, 'roles');
+        $key = $this->tag.'-roles-'.$user->getKey();
 
-        return $this->sear($key, function () use ($authority) {
-            return parent::getRoles($authority);
+        return $this->cache->sear($key, function () use ($user) {
+            return parent::getRoles($user);
         });
-    }
-
-    /**
-     * Get an item from the cache, or store the default value forever.
-     *
-     * @param  string  $key
-     * @param  callable  $callback
-     * @return mixed
-     */
-    protected function sear($key, callable $callback)
-    {
-        if (is_null($value = $this->cache->get($key))) {
-            $this->cache->forever($key, $value = $callback());
-        }
-
-        return $value;
     }
 
     /**
      * Clear the cache.
      *
-     * @param  null|\Illuminate\Database\Eloquent\Model  $authority
+     * @param  null|int|\Illuminate\Database\Eloquent\Model  $user
      * @return $this
      */
-    public function refresh($authority = null)
+    public function refresh($user = null)
     {
-        if ( ! is_null($authority)) {
-            return $this->refreshFor($authority);
+        if ( ! is_null($user)) {
+            return $this->refreshFor($user);
         }
 
         if ($this->cache instanceof TaggedCache) {
             $this->cache->flush();
-        } else {
-            $this->refreshAllIteratively();
+
+            return $this;
         }
 
-        return $this;
+        return $this->refreshForAllUsersIteratively();
     }
 
     /**
-     * Clear the cache for the given authority.
+     * Clear the cache for the given user.
      *
-     * @param  \Illuminate\Database\Eloquent\Model  $authority
+     * @param  \Illuminate\Database\Eloquent\Model|int  $user
      * @return $this
      */
-    public function refreshFor(Model $authority)
+    public function refreshFor($user)
     {
-        $this->cache->forget($this->getCacheKey($authority, 'abilities', true));
-        $this->cache->forget($this->getCacheKey($authority, 'abilities', false));
-        $this->cache->forget($this->getCacheKey($authority, 'roles'));
+        $id = $user instanceof Model ? $user->getKey() : $user;
+
+        $this->cache->forget($this->tag.'-abilities-'.$id);
+
+        $this->cache->forget($this->tag.'-roles-'.$id);
 
         return $this;
     }
 
     /**
-     * Refresh the cache for all roles and users, iteratively.
+     * Refresh the cache for all users, iteratively.
      *
-     * @return void
+     * @return $this
      */
-    protected function refreshAllIteratively()
+    protected function refreshForAllUsersIteratively()
     {
-        foreach (Models::user()->all() as $user) {
-            $this->refreshFor($user);
+        $user = Models::user();
+
+        foreach ($user->lists($user->getKeyName()) as $id) {
+            $this->refreshFor($id);
         }
 
-        foreach (Models::role()->all() as $role) {
-            $this->refreshFor($role);
-        }
-    }
-
-    /**
-     * Get the cache key for the given model's cache type.
-     *
-     * @param  \Illuminate\Database\Eloquent\Model  $model
-     * @param  string  $type
-     * @param  bool  $allowed
-     * @return string
-     */
-    protected function getCacheKey(Model $model, $type, $allowed = true)
-    {
-        return implode('-', [
-            $this->tag,
-            $type,
-            $model->getMorphClass(),
-            $model->getKey(),
-            $allowed ? 'a' : 'f',
-        ]);
+        return $this;
     }
 
     /**

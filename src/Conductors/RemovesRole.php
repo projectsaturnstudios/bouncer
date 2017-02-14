@@ -2,14 +2,15 @@
 
 namespace Silber\Bouncer\Conductors;
 
-use Silber\Bouncer\Helper;
 use Silber\Bouncer\Database\Role;
 use Silber\Bouncer\Database\Models;
+
+use Illuminate\Database\Eloquent\Model;
 
 class RemovesRole
 {
     /**
-     * The role to be removed from an authority.
+     * The role to be removed from a user.
      *
      * @var \Silber\Bouncer\Database\Role|string
      */
@@ -26,22 +27,24 @@ class RemovesRole
     }
 
     /**
-     * Remove the role from the given authority.
+     * Remove the role from the given user.
      *
-     * @param  \Illuminate\Database\Eloquent\Model|array|int  $authority
+     * @param  \Illuminate\Database\Eloquent\Model|array|int  $user
      * @return bool
      */
-    public function from($authority)
+    public function from($user)
     {
-        if (is_null($role = $this->role())) {
+        if ( ! $role = $this->role()) {
             return false;
         }
 
-        $authorities = is_array($authority) ? $authority : [$authority];
-
-        foreach (Helper::mapAuthorityByClass($authorities) as $class => $keys) {
-            $role->retractFrom($class, $keys);
+        if ($user instanceof Model) {
+            $user = $user->getKey();
         }
+
+        $users = is_array($user) ? $user : [$user];
+
+        $role->users()->detach($user);
 
         return true;
     }

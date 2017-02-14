@@ -50,20 +50,8 @@ abstract class BaseTestCase extends PHPUnit_Framework_TestCase
 
         (new CreateBouncerTables)->up();
 
-        $this->migrateTestTables();
-    }
-
-    protected function migrateTestTables()
-    {
         Schema::create('users', function ($table) {
             $table->increments('id');
-            $table->string('name')->nullable();
-            $table->timestamps();
-        });
-
-        Schema::create('accounts', function ($table) {
-            $table->increments('id');
-            $table->integer('user_id')->unsigned()->nullable();
             $table->string('name')->nullable();
             $table->timestamps();
         });
@@ -76,42 +64,36 @@ abstract class BaseTestCase extends PHPUnit_Framework_TestCase
      */
     public function tearDown()
     {
-        $this->rollbackTestTables();
+        Schema::drop('users');
 
         (new CreateBouncerTables)->down();
 
         $this->clipboard = $this->db = null;
     }
 
-    protected function rollbackTestTables()
-    {
-        Schema::drop('users');
-        Schema::drop('accounts');
-    }
-
     /**
      * Get a bouncer instance.
      *
-     * @param  \Illuminate\Database\Eloquent\Model|null  $user
+     * @param  \User|null  $user
      * @return \Silber\Bouncer\Bouncer
      */
-    protected function bouncer(Eloquent $authority = null)
+    protected function bouncer(User $user = null)
     {
-        $bouncer = new Bouncer($this->clipboard);
+        $bouncer = new Bouncer($this->clipboard, new Seeder(new Container));
 
-        return $bouncer->setGate($this->gate($authority ?: User::create()));
+        return $bouncer->setGate($this->gate($user ?: User::create()));
     }
 
     /**
      * Get an access gate instance.
      *
-     * @param  \Illuminate\Database\Eloquent\Model  $user
+     * @param  \User  $user
      * @return \Illuminate\Auth\Access\Gate
      */
-    protected function gate(Eloquent $authority)
+    protected function gate(User $user)
     {
-        $gate = new Gate(new Container, function () use ($authority) {
-            return $authority;
+        $gate = new Gate(new Container, function () use ($user) {
+            return $user;
         });
 
         $this->clipboard->registerAt($gate);
@@ -150,15 +132,6 @@ class User extends Eloquent
     use HasRolesAndAbilities;
 
     protected $table = 'users';
-
-    protected $guarded = [];
-}
-
-class Account extends Eloquent
-{
-    use HasRolesAndAbilities;
-
-    protected $table = 'accounts';
 
     protected $guarded = [];
 }

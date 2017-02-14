@@ -7,30 +7,31 @@ class BouncerSimpleTest extends BaseTestCase
 {
     public function test_bouncer_can_give_and_remove_abilities()
     {
-        $bouncer = $this->bouncer($user = User::create())->dontCache();
+        $bouncer = $this->bouncer($user = User::create());
 
         $bouncer->allow($user)->to('edit-site');
 
         $this->assertTrue($bouncer->allows('edit-site'));
 
         $bouncer->disallow($user)->to('edit-site');
+        $this->clipboard->refresh();
 
         $this->assertTrue($bouncer->denies('edit-site'));
     }
 
-    public function test_bouncer_can_give_and_remove_wildcard_abilities()
+    public function test_bouncer_can_deny_access_if_set_to_work_exclusively()
     {
-        $bouncer = $this->bouncer($user = User::create())->dontCache();
+        $bouncer = $this->bouncer();
 
-        $bouncer->allow($user)->to('*');
+        $bouncer->getGate()->define('access-dashboard', function () {
+            return true;
+        });
 
-        $this->assertTrue($bouncer->allows('edit-site'));
-        $this->assertTrue($bouncer->allows('ban-users'));
-        $this->assertTrue($bouncer->allows('*'));
+        $this->assertTrue($bouncer->allows('access-dashboard'));
 
-        $bouncer->disallow($user)->to('*');
+        $bouncer->exclusive();
 
-        $this->assertTrue($bouncer->denies('edit-site'));
+        $this->assertTrue($bouncer->denies('access-dashboard'));
     }
 
     public function test_bouncer_can_ignore_duplicate_ability_allowances()
@@ -55,7 +56,7 @@ class BouncerSimpleTest extends BaseTestCase
 
     public function test_bouncer_can_give_and_remove_roles()
     {
-        $bouncer = $this->bouncer($user = User::create())->dontCache();
+        $bouncer = $this->bouncer($user = User::create());
 
         $bouncer->allow('admin')->to('edit-site');
         $bouncer->assign('admin')->to($user);
@@ -68,6 +69,7 @@ class BouncerSimpleTest extends BaseTestCase
 
         $bouncer->retract('admin')->from($user);
         $bouncer->retract($editor)->from($user);
+        $this->clipboard->refresh();
 
         $this->assertTrue($bouncer->denies('edit-site'));
     }
@@ -158,21 +160,5 @@ class BouncerSimpleTest extends BaseTestCase
 
         $this->assertInstanceOf(Ability::class, $ability);
         $this->assertEquals('test-ability', $ability->name);
-    }
-
-    public function test_bouncer_can_allow_abilities_from_a_defined_callback()
-    {
-        $bouncer = $this->bouncer($user = User::create());
-
-        $bouncer->define('edit', function ($user, $account) {
-            if ( ! $account instanceof Account) {
-                return null;
-            }
-
-            return $user->id == $account->user_id;
-        });
-
-        $this->assertTrue($bouncer->allows('edit', new Account(['user_id' => $user->id])));
-        $this->assertFalse($bouncer->allows('edit', new Account(['user_id' => 99])));
     }
 }

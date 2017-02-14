@@ -8,11 +8,11 @@ use Illuminate\Database\Eloquent\Model;
 class ChecksRole
 {
     /**
-     * The authority against which to check for roles.
+     * The user against whom to check for roles.
      *
      * @var \Illuminate\Database\Eloquent\Model
      */
-    protected $authority;
+    protected $user;
 
     /**
      * The bouncer clipboard instance.
@@ -24,17 +24,17 @@ class ChecksRole
     /**
      * Constructor.
      *
-     * @param \Illuminate\Database\Eloquent\Model  $authority
+     * @param \Illuminate\Database\Eloquent\Model  $user
      * @param \Silber\Bouncer\Clipboard  $clipboard
      */
-    public function __construct(Model $authority, Clipboard $clipboard)
+    public function __construct(Model $user, Clipboard $clipboard)
     {
-        $this->authority = $authority;
+        $this->user = $user;
         $this->clipboard = $clipboard;
     }
 
     /**
-     * Check if the authority has any of the given roles.
+     * Check if the user has any of the given roles.
      *
      * @param  string  $role
      * @return bool
@@ -43,11 +43,11 @@ class ChecksRole
     {
         $roles = func_get_args();
 
-        return $this->clipboard->checkRole($this->authority, $roles, 'or');
+        return $this->clipboard->checkRole($this->user, $roles, 'or');
     }
 
     /**
-     * Check if the authority doesn't have any of the given roles.
+     * Check if the user doesn't have any of the given roles.
      *
      * @param  string  $role
      * @return bool
@@ -56,7 +56,7 @@ class ChecksRole
     {
         $roles = func_get_args();
 
-        return $this->clipboard->checkRole($this->authority, $roles, 'not');
+        return $this->clipboard->checkRole($this->user, $roles, 'not');
     }
 
     /**
@@ -69,7 +69,7 @@ class ChecksRole
     {
         $roles = func_get_args();
 
-        return $this->clipboard->checkRole($this->authority, $roles, 'or');
+        return $this->clipboard->checkRole($this->user, $roles, 'or');
     }
 
     /**
@@ -82,11 +82,11 @@ class ChecksRole
     {
         $roles = func_get_args();
 
-        return $this->clipboard->checkRole($this->authority, $roles, 'not');
+        return $this->clipboard->checkRole($this->user, $roles, 'not');
     }
 
     /**
-     * Check if the authority has all of the given roles.
+     * Check if the user has all of the given roles.
      *
      * @param  string  $role
      * @return bool
@@ -95,6 +95,6 @@ class ChecksRole
     {
         $roles = func_get_args();
 
-        return $this->clipboard->checkRole($this->authority, $roles, 'and');
+        return $this->clipboard->checkRole($this->user, $roles, 'and');
     }
 }

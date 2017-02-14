@@ -1,29 +1,36 @@
 <?php
 
-namespace Silber\Bouncer\Database\Concerns;
+namespace Silber\Bouncer\Database;
 
 use Illuminate\Container\Container;
 
 use Silber\Bouncer\Clipboard;
-use Silber\Bouncer\Database\Role;
-use Silber\Bouncer\Database\Models;
 use Silber\Bouncer\Conductors\AssignsRole;
 use Silber\Bouncer\Conductors\RemovesRole;
-use Silber\Bouncer\Database\Queries\Roles as RolesQuery;
+use Silber\Bouncer\Database\Constraints\Roles as RolesConstraint;
 
 trait HasRoles
 {
     /**
      * The roles relationship.
      *
-     * @return \Illuminate\Database\Eloquent\Relations\MorphToMany
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany
      */
-    public function roles()
+    public function roles($accountInsteadOfUser = false)
     {
-        return $this->morphToMany(
+        if($accountInsteadOfUser)
+        {
+            return $this->belongsToMany(
+                Models::classname(Ability::class),
+                Models::table('account_roles'),
+                'account_id'
+            );
+        }
+
+        return $this->belongsToMany(
             Models::classname(Role::class),
-            'entity',
-            Models::table('assigned_roles')
+            Models::table('user_roles'),
+            'user_id'
         );
     }
 
@@ -59,7 +66,7 @@ trait HasRoles
      * @param  string  $role
      * @return bool
      */
-    public function isAn($role)
+    public function is($role)
     {
         $roles = func_get_args();
 
@@ -69,57 +76,18 @@ trait HasRoles
     }
 
     /**
-     * Check if the model has any of the given roles.
-     *
-     * Alias for the "isAn" method.
-     *
-     * @param  string  $role
-     * @return bool
-     */
-    public function isA($role)
-    {
-        return call_user_func_array([$this, 'isAn'], func_get_args());
-    }
-
-    /**
      * Check if the model has none of the given roles.
-     *
-     * @param  string  $role
-     * @return bool
-     */
-    public function isNotAn($role)
-    {
-        $roles = func_get_args();
-
-        $clipboard = $this->getClipboardInstance();
-
-        return $clipboard->checkRole($this, $roles, 'not');
-    }
-
-    /**
-     * Check if the model has none of the given roles.
-     *
-     * Alias for the "isNotAn" method.
-     *
-     * @param  string  $role
-     * @return bool
-     */
-    public function isNotA($role)
-    {
-        return call_user_func_array([$this, 'isNotAn'], func_get_args());
-    }
-
-    /**
-     * Check if the model has none of the given roles.
-     *
-     * Alias for the "isNotAn" method.
      *
      * @param  string  $role
      * @return bool
      */
     public function isNot($role)
     {
-        return call_user_func_array([$this, 'isNotAn'], func_get_args());
+        $roles = func_get_args();
+
+        $clipboard = $this->getClipboardInstance();
+
+        return $clipboard->checkRole($this, $roles, 'not');
     }
 
     /**
@@ -146,7 +114,7 @@ trait HasRoles
      */
     public function scopeWhereIs($query, $role)
     {
-        $constraint = new RolesQuery;
+        $constraint = new RolesConstraint;
 
         $params = array_slice(func_get_args(), 1);
 
@@ -164,7 +132,7 @@ trait HasRoles
      */
     public function scopeWhereIsAll($query, $role)
     {
-        $constrainer = new RolesQuery;
+        $constrainer = new RolesConstraint;
 
         $params = array_slice(func_get_args(), 1);
 

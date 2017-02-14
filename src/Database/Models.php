@@ -2,32 +2,18 @@
 
 namespace Silber\Bouncer\Database;
 
-use Closure;
 use App\User;
-use Illuminate\Database\Eloquent\Model;
+
+use App\Models\Account;
 
 class Models
 {
-    /**
-     * The prefix for the tables.
-     *
-     * @var string
-     */
-    protected static $prefix = '';
-
     /**
      * Map for the bouncer's models.
      *
      * @var array
      */
     protected static $models = [];
-
-    /**
-     * Holds the map of ownership for models.
-     *
-     * @var array
-     */
-    protected static $ownership = [];
 
     /**
      * Map for the bouncer's tables.
@@ -81,17 +67,6 @@ class Models
     }
 
     /**
-     * Set the prefix for the tables.
-     *
-     * @param  string  $prefix
-     * @return void
-     */
-    public static function setPrefix($prefix)
-    {
-        static::$prefix = $prefix;
-    }
-
-    /**
      * Get a custom table name mapping for the given table.
      *
      * @param  string  $table
@@ -107,16 +82,6 @@ class Models
     }
 
     /**
-     * Get the prefix for the tables.
-     *
-     * @return string
-     */
-    public static function prefix()
-    {
-        return static::$prefix;
-    }
-
-    /**
      * Get the classname mapping for the given model.
      *
      * @param  string  $model
@@ -129,61 +94,6 @@ class Models
         }
 
         return $model;
-    }
-
-    /**
-     * Register an attribute/callback to determine if a model is owned by a given authority.
-     *
-     * @param  string|\Closure  $model
-     * @param  string|\Closure|null  $attribute
-     * @return void
-     */
-    public static function ownedVia($model, $attribute = null)
-    {
-        if (is_null($attribute)) {
-            static::$ownership['*'] = $model;
-        }
-
-        static::$ownership[$model] = $attribute;
-    }
-
-    /**
-     * Determines whether the given model is owned by the given authority.
-     *
-     * @param  \Illuminate\Database\Eloquent\Model  $authority
-     * @param  \Illuminate\Database\Eloquent\Model  $model
-     * @return bool
-     */
-    public static function isOwnedBy(Model $authority, Model $model)
-    {
-        $type = get_class($model);
-
-        if (isset(static::$ownership[$type])) {
-            $attribute = static::$ownership[$type];
-        } elseif (isset(static::$ownership['*'])) {
-            $attribute = static::$ownership['*'];
-        } else {
-            $attribute = strtolower(static::basename($authority)).'_id';
-        }
-
-        return static::isOwnedVia($attribute, $authority, $model);
-    }
-
-    /**
-     * Determines ownership via the given attribute.
-     *
-     * @param  string|\Closure  $attribute
-     * @param  \Illuminate\Database\Eloquent\Model  $authority
-     * @param  \Illuminate\Database\Eloquent\Model  $model
-     * @return bool
-     */
-    protected static function isOwnedVia($attribute, Model $authority, Model $model)
-    {
-        if ($attribute instanceof Closure) {
-            return $attribute($model, $authority);
-        }
-
-        return $authority->getKey() == $model->{$attribute};
     }
 
     /**
@@ -220,13 +130,14 @@ class Models
     }
 
     /**
-     * Reset all settings to their original state.
+     * Get an instance of the account model.
      *
-     * @return void
+     * @param  array  $attributes
+     * @return \Illuminate\Database\Eloquent\Model
      */
-    public static function reset()
+    public static function account(array $attributes = [])
     {
-        static::$models = static::$tables = static::$ownership = [];
+        return static::make(Account::class, $attributes);
     }
 
     /**
@@ -241,22 +152,5 @@ class Models
         $model = static::classname($model);
 
         return new $model($attributes);
-    }
-
-    /**
-     * Get the basename of the given class.
-     *
-     * @param  string|object  $class
-     * @return string
-     */
-    protected static function basename($class)
-    {
-        if ( ! is_string($class)) {
-            $class = get_class($class);
-        }
-
-        $segments = explode('\\', $class);
-
-        return end($segments);
     }
 }
