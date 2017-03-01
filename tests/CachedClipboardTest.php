@@ -2,18 +2,11 @@
 
 use Silber\Bouncer\CachedClipboard;
 
-use Mockery as m;
 use Illuminate\Cache\ArrayStore;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Collection;
 
 class CachedClipboardTest extends BaseTestCase
 {
-    public function tearDown()
-    {
-        m::close();
-    }
-
     public function test_it_caches_abilities()
     {
         $cache = new ArrayStore;
@@ -29,29 +22,19 @@ class CachedClipboardTest extends BaseTestCase
         $this->assertEquals(['ban-users'], $this->getAbliities($cache, $user));
     }
 
-    public function test_it_caches_empty_abilities()
-    {
-        $user = User::create();
-        $cache = new ArrayStore;
-
-        $clipboard = m::mock(CachedClipboard::class.'[getFreshAbilities]', [$cache]);
-        $clipboard->shouldReceive('getFreshAbilities')->once()->andReturn(new Collection);
-
-        $clipboard->getAbilities($user);
-        $clipboard->getAbilities($user);
-    }
-
     public function test_it_caches_roles()
     {
-        $bouncer = $this->bouncer($user = User::create())->cache(new ArrayStore);
+        $cache = new ArrayStore;
+
+        $bouncer = $this->bouncer($user = User::create())->cache($cache);
 
         $bouncer->assign('editor')->to($user);
 
-        $this->assertTrue($bouncer->is($user)->an('editor'));
+        $this->assertEquals(['editor'], $this->getRoles($cache, $user));
 
         $bouncer->assign('moderator')->to($user);
 
-        $this->assertFalse($bouncer->is($user)->a('moderator'));
+        $this->assertEquals(['editor'], $this->getRoles($cache, $user));
     }
 
     public function test_it_can_refresh_the_cache()
@@ -110,7 +93,7 @@ class CachedClipboardTest extends BaseTestCase
     {
         $clipboard = new CachedClipboard($cache);
 
-        $abilities = $clipboard->getAbilities($user)->pluck('name');
+        $abilities = $clipboard->getAbilities($user)->lists('name');
 
         return $abilities->sort()->values()->all();
     }
