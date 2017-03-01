@@ -26,6 +26,20 @@ trait HasRoles
     }
 
     /**
+     * The ability roles relationship.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany
+     */
+    public function account_roles()
+    {
+        return $this->belongsToMany(
+            Models::classname(Role::class),
+            Models::table('account_roles'),
+            'account_id'
+        );
+    }
+
+    /**
      * Assign the given role to the model.
      *
      * @param  \Silber\Bouncer\Database\Role|string  $role
