@@ -54,11 +54,27 @@ class GivesAbility
      */
     protected function giveAbilities(array $ids, Model $model)
     {
-        $existing = $model->abilities()->whereIn('id', $ids)->lists('id')->all();
+        if($model instanceOf \App\Models\Account)
+        {
+            $existing = $model->account_abilities()->whereIn('id', $ids)->lists('id')->all();
+        }
+        else
+        {
+            $existing = $model->abilities()->whereIn('id', $ids)->lists('id')->all();
+        }
+
 
         $ids = array_diff($ids, $existing);
 
-        $model->abilities()->attach($ids);
+        if($model instanceOf \App\Models\Account)
+        {
+            $model->account_abilities()->attach($ids);
+        }
+        else
+        {
+            $model->abilities()->attach($ids);
+        }
+
     }
 
     /**
