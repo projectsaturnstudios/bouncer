@@ -3,7 +3,6 @@
 namespace Silber\Bouncer;
 
 use RuntimeException;
-use Illuminate\Cache\NullStore;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Cache\Store;
 use Illuminate\Database\Eloquent\Model;
@@ -17,19 +16,22 @@ use Silber\Bouncer\Conductors\AssignsRole;
 use Silber\Bouncer\Conductors\RemovesRole;
 use Silber\Bouncer\Conductors\GivesAbility;
 use Silber\Bouncer\Conductors\RemovesAbility;
-use Silber\Bouncer\Conductors\ForbidsAbility;
-use Silber\Bouncer\Conductors\UnforbidsAbility;
-use Silber\Bouncer\Contracts\Clipboard as ClipboardContract;
-use Silber\Bouncer\Contracts\CachedClipboard as CachedClipboardContract;
 
 class Bouncer
 {
     /**
      * The bouncer clipboard instance.
      *
-     * @var \Silber\Bouncer\Contracts\Clipboard
+     * @var \Silber\Bouncer\CachedClipboard
      */
     protected $clipboard;
+
+    /**
+     * The bouncer seeder instance.
+     *
+     * @var \Silber\Bouncer\Seeder
+     */
+    protected $seeder;
 
     /**
      * The access gate instance.
@@ -41,33 +43,13 @@ class Bouncer
     /**
      * Constructor.
      *
-     * @param \Silber\Bouncer\Contracts\Clipboard  $clipboard
+     * @param \Silber\Bouncer\CachedClipboard  $clipboard
+     * @param \Silber\Bouncer\Seeder  $seeder
      */
-    public function __construct(ClipboardContract $clipboard)
+    public function __construct(CachedClipboard $clipboard, Seeder $seeder)
     {
         $this->clipboard = $clipboard;
-    }
-
-    /**
-     * Create a new Bouncer instance.
-     *
-     * @param  \Illuminate\Database\Eloquent\Model|null  $user
-     * @return static
-     */
-    public static function create(Model $user = null)
-    {
-        return static::make()->create($user);
-    }
-
-    /**
-     * Create a bouncer factory instance.
-     *
-     * @param  \Illuminate\Database\Eloquent\Model|null  $user
-     * @return \Silber\Bouncer\Factory.
-     */
-    public static function make(Model $user = null)
-    {
-        return new Factory($user);
+        $this->seeder = $seeder;
     }
 
     /**
@@ -78,7 +60,7 @@ class Bouncer
      */
     public function seeder($seeder)
     {
-        $this->resolve(Seeder::class)->register($seeder);
+        $this->seeder->register($seeder);
 
         return $this;
     }
@@ -90,57 +72,35 @@ class Bouncer
      */
     public function seed()
     {
-        $this->resolve(Seeder::class)->run();
+        $this->seeder->run();
 
         return $this;
     }
 
     /**
-     * Start a chain, to allow the given authority an ability.
+     * Start a chain, to allow the given role a ability.
      *
-     * @param  \Illuminate\Database\Eloquent\Model|string  $authority
+     * @param  \Silber\Bouncer\Database\Role|string  $role
      * @return \Silber\Bouncer\Conductors\GivesAbility
      */
-    public function allow($authority)
+    public function allow($role)
     {
-        return new GivesAbility($authority);
+        return new GivesAbility($role);
     }
 
     /**
-     * Start a chain, to disallow the given authority an ability.
+     * Start a chain, to disallow the given role a ability.
      *
-     * @param  \Illuminate\Database\Eloquent\Model|string  $authority
+     * @param  \Silber\Bouncer\Database\Role|string  $role
      * @return \Silber\Bouncer\Conductors\RemovesAbility
      */
-    public function disallow($authority)
+    public function disallow($role)
     {
-        return new RemovesAbility($authority);
+        return new RemovesAbility($role);
     }
 
     /**
-     * Start a chain, to forbid the given authority an ability.
-     *
-     * @param  \Illuminate\Database\Eloquent\Model|string  $authority
-     * @return \Silber\Bouncer\Conductors\GivesAbility
-     */
-    public function forbid($authority)
-    {
-        return new ForbidsAbility($authority);
-    }
-
-    /**
-     * Start a chain, to unforbid the given authority an ability.
-     *
-     * @param  \Illuminate\Database\Eloquent\Model|string  $authority
-     * @return \Silber\Bouncer\Conductors\RemovesAbility
-     */
-    public function unforbid($authority)
-    {
-        return new UnforbidsAbility($authority);
-    }
-
-    /**
-     * Start a chain, to assign the given role to a model.
+     * Start a chain, to assign the given role to a user.
      *
      * @param  \Silber\Bouncer\Database\Role|string  $role
      * @return \Silber\Bouncer\Conductors\AssignsRole
@@ -151,7 +111,7 @@ class Bouncer
     }
 
     /**
-     * Start a chain, to retract the given role from a model.
+     * Start a chain, to retract the given role from a user.
      *
      * @param  \Silber\Bouncer\Database\Role|string  $role
      * @return \Silber\Bouncer\Conductors\RemovesRole
@@ -162,14 +122,14 @@ class Bouncer
     }
 
     /**
-     * Start a chain, to check if the given authority has a certain role.
+     * Start a chain, to check if the given user has a certain role.
      *
-     * @param  \Illuminate\Database\Eloquent\Model  $authority
+     * @param  \Illuminate\Database\Eloquent\Model  $user
      * @return \Silber\Bouncer\Conductors\ChecksRole
      */
-    public function is(Model $authority)
+    public function is(Model $user)
     {
-        return new ChecksRole($authority, $this->clipboard);
+        return new ChecksRole($user, $this->clipboard);
     }
 
     /**
@@ -180,11 +140,7 @@ class Bouncer
      */
     public function cache(Store $cache = null)
     {
-        if (! $this->usesCachedClipboard()) {
-            throw new RuntimeException('To use caching, you must use an instance of CachedClipboard.');
-        }
-
-        $cache = $cache ?: $this->resolve(CacheRepository::class)->getStore();
+        $cache = $cache ?: $this->make(CacheRepository::class)->getStore();
 
         $this->clipboard->setCache($cache);
 
@@ -192,45 +148,27 @@ class Bouncer
     }
 
     /**
-     * Fully disable all query caching.
-     *
-     * @return $this
-     */
-    public function dontCache()
-    {
-        if ($this->usesCachedClipboard()) {
-            $this->clipboard->setCache(new NullStore);
-        }
-
-        return $this;
-    }
-
-    /**
      * Clear the cache.
      *
-     * @param  null|\Illuminate\Database\Eloquent\Model  $authority
+     * @param  null|\Illuminate\Database\Eloquent\Model  $user
      * @return $this
      */
-    public function refresh(Model $authority = null)
+    public function refresh(Model $user = null)
     {
-        if ($this->usesCachedClipboard()) {
-            $this->clipboard->refresh($authority);
-        }
+        $this->clipboard->refresh($user);
 
         return $this;
     }
 
     /**
-     * Clear the cache for the given authority.
+     * Clear the cache for the given user.
      *
-     * @param  \Illuminate\Database\Eloquent\Model  $authority
+     * @param  \Illuminate\Database\Eloquent\Model  $user
      * @return $this
      */
-    public function refreshFor(Model $authority)
+    public function refreshFor(Model $user)
     {
-        if ($this->usesCachedClipboard()) {
-            $this->clipboard->refreshFor($authority);
-        }
+        $this->clipboard->refreshFor($user);
 
         return $this;
     }
@@ -269,31 +207,7 @@ class Bouncer
     }
 
     /**
-     * Determine whether the clipboard used is a cached clipboard.
-     *
-     * @return bool
-     */
-    public function usesCachedClipboard()
-    {
-        return $this->clipboard instanceof CachedClipboardContract;
-    }
-
-    /**
-     * Define a new ability using a callback.
-     *
-     * @param  string  $ability
-     * @param  callable|string  $callback
-     * @return $this
-     *
-     * @throws \InvalidArgumentException
-     */
-    public function define($ability, $callback)
-    {
-        return $this->getGate(true)->define($ability, $callback);
-    }
-
-    /**
-     * Determine if the given ability should be granted for the current authority.
+     * Determine if the given ability should be granted for the current user.
      *
      * @param  string  $ability
      * @param  array|mixed  $arguments
@@ -305,7 +219,7 @@ class Bouncer
     }
 
     /**
-     * Determine if the given ability should be denied for the current authority.
+     * Determine if the given ability should be denied for the current user.
      *
      * @param  string  $ability
      * @param  array|mixed  $arguments
@@ -339,20 +253,6 @@ class Bouncer
     }
 
     /**
-     * Register an attribute/callback to determine if a model is owned by a given authority.
-     *
-     * @param  string|\Closure  $model
-     * @param  string|\Closure|null  $attribute
-     * @return void
-     */
-    public function ownedVia($model, $attribute = null)
-    {
-        Models::ownedVia($model, $attribute);
-
-        return $this;
-    }
-
-    /**
      * Set the model to be used for abilities.
      *
      * @param string  $model
@@ -383,6 +283,16 @@ class Bouncer
     }
 
     /**
+     * Set the model to be used for accounts.
+     *
+     * @param string  $model
+     */
+    public static function useAccountModel($model)
+    {
+        Models::setAccountsModel($model);
+    }
+
+    /**
      * Set custom table names.
      *
      * @param  array  $map
@@ -394,13 +304,26 @@ class Bouncer
     }
 
     /**
+     * Set the bouncer to be the exclusive authority on gate access.
+     *
+     * @param  bool  $boolean
+     * @return $this
+     */
+    public function exclusive($boolean = true)
+    {
+        $this->clipboard->setExclusivity($boolean);
+
+        return $this;
+    }
+
+    /**
      * Resolve the given type from the container.
      *
      * @param  string  $abstract
      * @param  array  $parameters
      * @return mixed
      */
-    protected function resolve($abstract, array $parameters = [])
+    protected function make($abstract, array $parameters = [])
     {
         return Container::getInstance()->make($abstract, $parameters);
     }

@@ -3,14 +3,12 @@
 namespace Silber\Bouncer;
 
 use Silber\Bouncer\Seed\Seeder;
-use Silber\Bouncer\UpgradeCommand;
 use Silber\Bouncer\Database\Models;
 use Silber\Bouncer\Seed\SeedCommand;
 
 use Illuminate\Cache\ArrayStore;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Contracts\Auth\Access\Gate;
-use Illuminate\Database\Eloquent\Relations\Relation;
 
 class BouncerServiceProvider extends ServiceProvider
 {
@@ -21,10 +19,9 @@ class BouncerServiceProvider extends ServiceProvider
      */
     public function register()
     {
+        $this->registerSeedCommand();
         $this->registerClipboard();
-        $this->registerCommands();
         $this->registerBouncer();
-        $this->registerMorphs();
         $this->registerSeeder();
     }
 
@@ -37,45 +34,17 @@ class BouncerServiceProvider extends ServiceProvider
     {
         $this->publishMigrations();
         $this->registerAtGate();
-        $this->setTablePrefix();
         $this->setUserModel();
     }
 
     /**
-     * Set the table prefix for Bouncer's tables.
+     * Register the seed command with artisan.
      *
      * @return void
      */
-    protected function setTablePrefix()
-    {
-        if ($prefix = $this->getTablePrefix()) {
-            Models::setPrefix($prefix);
-        }
-    }
-
-    /**
-     * Get the configured table prefix.
-     *
-     * @return string|null
-     */
-    protected function getTablePrefix()
-    {
-        $config = $this->app->config['database'];
-
-        $connection = array_get($config, 'default');
-
-        return array_get($config, "connections.{$connection}.prefix");
-    }
-
-    /**
-     * Register Bouncer's commands with artisan.
-     *
-     * @return void
-     */
-    protected function registerCommands()
+    protected function registerSeedCommand()
     {
         $this->commands(SeedCommand::class);
-        $this->commands(UpgradeCommand::class);
     }
 
     /**
@@ -98,23 +67,13 @@ class BouncerServiceProvider extends ServiceProvider
     protected function registerBouncer()
     {
         $this->app->singleton(Bouncer::class, function () {
-            $bouncer = new Bouncer($this->app->make(Clipboard::class));
+            $bouncer = new Bouncer(
+                $this->app->make(Clipboard::class),
+                $this->app->make(Seeder::class)
+            );
 
             return $bouncer->setGate($this->app->make(Gate::class));
         });
-    }
-
-    /**
-     * Register Bouncer's models in the relation morph map.
-     *
-     * @return void
-     */
-    protected function registerMorphs()
-    {
-        Relation::morphMap([
-            \Silber\Bouncer\Database\Role::class,
-            \Silber\Bouncer\Database\Ability::class,
-        ]);
     }
 
     /**
@@ -144,7 +103,7 @@ class BouncerServiceProvider extends ServiceProvider
 
         $target = $this->app->databasePath().'/migrations/'.$timestamp.'_create_bouncer_tables.php';
 
-        $this->publishes([$stub => $target], 'bouncer.migrations');
+        $this->publishes([$stub => $target], 'migrations');
     }
 
     /**

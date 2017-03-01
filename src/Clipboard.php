@@ -3,17 +3,21 @@
 namespace Silber\Bouncer;
 
 use Silber\Bouncer\Database\Models;
-use Silber\Bouncer\Contracts\Clipboard as ClipboardContract;
-use Silber\Bouncer\Database\Queries\Abilities as AbilitiesQuery;
 
-use Illuminate\Support\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Contracts\Auth\Access\Gate;
 use Illuminate\Auth\Access\HandlesAuthorization;
 
-class Clipboard implements ClipboardContract
+class Clipboard
 {
     use HandlesAuthorization;
+
+    /**
+     * Whether the bouncer is the exclusive authority on gate access.
+     *
+     * @var bool
+     */
+    protected $exclusive = false;
 
     /**
      * Register the clipboard at the given gate.
@@ -23,21 +27,20 @@ class Clipboard implements ClipboardContract
      */
     public function registerAt(Gate $gate)
     {
-        $gate->before(function ($authority, $ability, $arguments = [], $additional = null) {
+        $gate->before(function ($user, $ability, $arguments = [], $additional = null) {
             list($model, $additional) = $this->parseGateArguments($arguments, $additional);
 
             if ( ! is_null($additional)) {
                 return;
             }
 
-            if ($id = $this->checkGetId($authority, $ability, $model)) {
+            if ($id = $this->checkGetId($user, $ability, $model)) {
                 return $this->allow('Bouncer granted permission via ability #'.$id);
             }
 
-            // If the response from "checkGetId" is "false", then this ability
-            // has been explicity forbidden. We'll return false so the gate
-            // doesn't run any further checks. Otherwise we return null.
-            return $id;
+            if ($this->exclusive) {
+                return false;
+            }
         });
     }
 
@@ -68,97 +71,63 @@ class Clipboard implements ClipboardContract
     }
 
     /**
-     * Determine if the given authority has the given ability.
+     * Set whether the bouncer is the exclusive authority on gate access.
      *
-     * @param  \Illuminate\Database\Eloquent\Model  $authority
+     * @param  bool  $boolean
+     * @return $this
+     */
+    public function setExclusivity($boolean)
+    {
+        $this->exclusive = $boolean;
+    }
+
+    /**
+     * Determine if the given user has the given ability.
+     *
+     * @param  \Illuminate\Database\Eloquent\Model  $user
      * @param  string  $ability
      * @param  \Illuminate\Database\Eloquent\Model|string|null  $model
      * @return bool
      */
-    public function check(Model $authority, $ability, $model = null)
+    public function check(Model $user, $ability, $model = null)
     {
-        return (bool) $this->checkGetId($authority, $ability, $model);
+        return (bool) $this->checkGetId($user, $ability, $model);
     }
 
     /**
-     * Determine if the given authority has the given ability, and return the ability ID.
+     * Determine if the given user has the given ability and return the ability ID.
      *
-     * @param  \Illuminate\Database\Eloquent\Model  $authority
+     * @param  \Illuminate\Database\Eloquent\Model  $user
      * @param  string  $ability
      * @param  \Illuminate\Database\Eloquent\Model|string|null  $model
-     * @return int|bool|null
+     * @return int|bool
      */
-    protected function checkGetId(Model $authority, $ability, $model = null)
+    protected function checkGetId(Model $user, $ability, $model = null)
     {
-        $applicable = $this->compileAbilityIdentifiers($ability, $model);
+        $abilities = $this->getAbilities($user)->toBase()->lists('identifier', 'id');
 
-        // We will first check if any of the applicable abilities have been forbidden.
-        // If so, we'll return false right away, so as to not pass the check. Then,
-        // we'll check if any of them have been allowed & return the matched ID.
-        $forbiddenId = $this->findMatchingAbility(
-            $this->getForbiddenAbilities($authority), $applicable, $model, $authority
-        );
+        $requested = $this->compileAbilityIdentifiers($ability, $model);
 
-        if ($forbiddenId) {
-            return false;
-        }
-
-        return $this->findMatchingAbility(
-            $this->getAbilities($authority), $applicable, $model, $authority
-        );
-    }
-
-    /**
-     * Determine if any of the abilities can be matched against the provided applicable ones.
-     *
-     * @param  \Illuminate\Support\Collection  $abilities
-     * @param  \Illuminate\Support\Collection  $applicable
-     * @param  \Illuminate\Database\Eloquent\Model  $model
-     * @param  \Illuminate\Database\Eloquent\Model  $authority
-     * @return int|null
-     */
-    protected function findMatchingAbility($abilities, $applicable, $model, $authority)
-    {
-        $abilities = $abilities->toBase()->pluck('identifier', 'id');
-
-        if ($id = $this->getMatchedAbilityId($abilities, $applicable)) {
-            return $id;
-        }
-
-        if ($model instanceof Model && Models::isOwnedBy($authority, $model)) {
-            return $this->getMatchedAbilityId($abilities, $applicable->map(function ($identifier) {
-                return $identifier.'-owned';
-            }));
-        }
-    }
-
-    /**
-     * Get the ID of the ability that matches one of the applicable abilities.
-     *
-     * @param  \Illuminate\Support\Collection  $abilityMap
-     * @param  \Illuminate\Support\Collection  $applicable
-     * @return int|null
-     */
-    protected function getMatchedAbilityId(Collection $abilityMap, Collection $applicable)
-    {
-        foreach ($abilityMap as $id => $identifier) {
-            if ($applicable->contains($identifier)) {
+        foreach ($abilities as $id => $ability) {
+            if (in_array($ability, $requested)) {
                 return $id;
             }
         }
+
+        return false;
     }
 
     /**
-     * Check if an authority has the given roles.
+     * Check if a user has the given roles.
      *
-     * @param  \Illuminate\Database\Eloquent\Model  $authority
+     * @param  \Illuminate\Database\Eloquent\Model  $user
      * @param  array|string  $roles
      * @param  string  $boolean
      * @return bool
      */
-    public function checkRole(Model $authority, $roles, $boolean = 'or')
+    public function checkRole(Model $user, $roles, $boolean = 'or')
     {
-        $available = $this->getRoles($authority)->intersect($roles);
+        $available = $this->getRoles($user)->intersect($roles);
 
         if ($boolean == 'or') {
             return $available->count() > 0;
@@ -174,91 +143,86 @@ class Clipboard implements ClipboardContract
      *
      * @param  string  $ability
      * @param  \Illuminate\Database\Eloquent\Model|string|null  $model
-     * @return \Illuminate\Support\Collection
+     * @return array
      */
     protected function compileAbilityIdentifiers($ability, $model)
     {
-        $ability = strtolower($ability);
-
         if (is_null($model)) {
-            return new Collection([$ability, '*-*', '*']);
+            return [strtolower($ability)];
         }
 
-        return new Collection($this->compileModelAbilityIdentifiers($ability, $model));
+        return $this->compileModelAbilityIdentifiers($ability, $model);
     }
 
     /**
      * Compile a list of ability identifiers that match the given model.
      *
      * @param  string  $ability
-     * @param  \Illuminate\Database\Eloquent\Model|string  $model
+     * @param  \Illuminate\Database\Eloquent\Model|string|null  $model
      * @return array
      */
     protected function compileModelAbilityIdentifiers($ability, $model)
     {
-        if ($model == '*') {
-            return ["{$ability}-*", "*-*"];
-        }
-
         $model = $model instanceof Model ? $model : new $model;
 
-        $type = strtolower($model->getMorphClass());
+        $identifier = strtolower($ability.'-'.$model->getMorphClass());
 
-        $abilities = [
-            "{$ability}-{$type}",
-            "{$ability}-*",
-            "*-{$type}",
-            "*-*",
-        ];
-
-        if ($model->exists) {
-            $abilities[] = "{$ability}-{$type}-{$model->getKey()}";
-            $abilities[] = "*-{$type}-{$model->getKey()}";
+        if ( ! $model->exists) {
+            return [$identifier];
         }
 
-        return $abilities;
+        return [$identifier, $identifier.'-'.$model->getKey()];
     }
 
     /**
-     * Get the given authority's roles.
+     * Get the given user's roles.
      *
-     * @param  \Illuminate\Database\Eloquent\Model  $authority
+     * @param  \Illuminate\Database\Eloquent\Model  $user
      * @return \Illuminate\Support\Collection
      */
-    public function getRoles(Model $authority)
+    public function getRoles(Model $user)
     {
-        $collection = $authority->roles()->get(['name'])->pluck('name');
-
-        // In Laravel 5.1, "pluck" returns an Eloquent collection,
-        // so we call "toBase" on it. In 5.2, "pluck" returns a
-        // base instance, so there is no "toBase" available.
-        if (method_exists($collection, 'toBase')) {
-            $collection = $collection->toBase();
-        }
-
-        return $collection;
+        return $user->roles()->lists('name');
     }
 
     /**
-     * Get a list of the authority's abilities.
+     * Get a list of the user's abilities.
      *
-     * @param  \Illuminate\Database\Eloquent\Model  $authority
-     * @param  bool  $allowed
+     * @param  \Illuminate\Database\Eloquent\Model  $user
      * @return \Illuminate\Database\Eloquent\Collection
      */
-    public function getAbilities(Model $authority, $allowed = true)
+    public function getAbilities(Model $user)
     {
-        return (new AbilitiesQuery)->getForAuthority($authority, $allowed);
+        $query = Models::ability()->whereHas('roles', $this->getRoleUsersConstraint($user));
+
+        return $query->orWhereHas('users', $this->getUserConstraint($user))->get();
     }
 
     /**
-     * Get a list of the authority's forbidden abilities.
+     * Constrain a roles query by the given user.
      *
-     * @param  \Illuminate\Database\Eloquent\Model  $authority
-     * @return \Illuminate\Database\Eloquent\Collection
+     * @param  \Illuminate\Database\Eloquent\Model  $user
+     * @return \Closure
      */
-    public function getForbiddenAbilities(Model $authority)
+    protected function getRoleUsersConstraint(Model $user)
     {
-        return $this->getAbilities($authority, false);
+        return function ($query) use ($user) {
+            $query->whereHas('users', $this->getUserConstraint($user));
+        };
+    }
+
+    /**
+     * Constrain a related query to the given user.
+     *
+     * @param  \Illuminate\Database\Eloquent\Model  $user
+     * @return \Closure
+     */
+    protected function getUserConstraint(Model $user)
+    {
+        return function ($query) use ($user) {
+            $column = "{$user->getTable()}.{$user->getKeyName()}";
+
+            $query->where($column, $user->getKey());
+        };
     }
 }

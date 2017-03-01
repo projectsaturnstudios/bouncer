@@ -2,14 +2,15 @@
 
 namespace Silber\Bouncer\Conductors;
 
-use Silber\Bouncer\Helper;
 use Silber\Bouncer\Database\Role;
 use Silber\Bouncer\Database\Models;
+
+use Illuminate\Database\Eloquent\Model;
 
 class AssignsRole
 {
     /**
-     * The role to be assigned to an authority.
+     * The role to be assigned to a user.
      *
      * @var \Silber\Bouncer\Database\Role|string
      */
@@ -26,17 +27,29 @@ class AssignsRole
     }
 
     /**
-     * Assign the role to the given authority.
+     * Assign the role to the given user or account.
      *
-     * @param  \Illuminate\Database\Eloquent\Model|array|int  $authority
+     * @param  \Illuminate\Database\Eloquent\Model|array|int  $user
      * @return bool
      */
-    public function to($authority)
+    public function to($model)
     {
-        $authorities = is_array($authority) ? $authority : [$authority];
+        $role = $this->role();
 
-        foreach (Helper::mapAuthorityByClass($authorities) as $class => $keys) {
-            $this->assignRole($this->role(), $class, $keys);
+        if ($model instanceof Model) {
+            $user = $model->getKey();
+        }
+
+        $ids = is_array($user) ? $user : [$user];
+        if($model instanceof \App\Models\Account)
+        {
+            echo "Model is Account\n";
+            $this->assignRoleToAccount($role, $ids);
+        }
+        else
+        {
+            echo "Model is User\n";
+            $this->assignRole($role, $ids);
         }
 
         return true;
@@ -57,39 +70,66 @@ class AssignsRole
     }
 
     /**
-     * Assign the role to the authorities with the given keys.
+     * Assign the role to the users with the given ids.
      *
      * @param  \Silber\Bouncer\Database\Role  $role
-     * @param  string  $class
-     * @param  array  $keys
+     * @param  array  $ids
      * @return void
      */
-    protected function assignRole(Role $role, $class, array $keys)
+    protected function assignRole(Role $role, array $ids)
     {
-        $existing = $this->getAuthoritiesWithRole($role, $class, $keys)->all();
+        $existing = $this->getUsersWithRole($role, $ids)->all();
 
-        $keys = array_diff($keys, $existing);
+        $ids = array_diff($ids, $existing);
 
-        $role->assignTo($class, $keys);
+        $role->users()->attach($ids);
     }
 
     /**
-     * Get the keys of the authorities that already have the given role.
+     * Assign the role to the account with the given ids.
      *
      * @param  \Silber\Bouncer\Database\Role  $role
-     * @param  string  $class
+     * @param  array  $ids
+     * @return void
+     */
+    protected function assignRoleToAccount(Role $role, array $ids)
+    {
+        $existing = $this->getAccountsWithRole($role, $ids)->all();
+
+        $ids = array_diff($ids, $existing);
+
+        $role->accounts()->attach($ids);
+    }
+
+    /**
+     * Get the IDs of the users that already have the given role.
+     *
+     * @param  \Silber\Bouncer\Database\Role  $role
      * @param  array  $ids
      * @return \Illuminate\Support\Collection
      */
-    protected function getAuthoritiesWithRole(Role $role, $class, array $ids)
+    protected function getUsersWithRole(Role $role, array $ids)
     {
-        $model = new $class;
+        $model = Models::user();
 
         $column = $model->getTable().'.'.$model->getKeyName();
 
-        return $model->whereIn($column, $ids)
-                     ->whereIs($role->name)
-                     ->get([$column])
-                     ->pluck($model->getKeyName());
+        return $role->users()->whereIn($column, $ids)->lists($column);
+    }
+
+    /**
+     * Get the IDs of the accounts that already have the given role.
+     *
+     * @param  \Silber\Bouncer\Database\Role  $role
+     * @param  array  $ids
+     * @return \Illuminate\Support\Collection
+     */
+    protected function getAccountsWithRole(Role $role, array $ids)
+    {
+        $model = Models::account();
+
+        $column = $model->getTable().'.'.$model->getKeyName();
+
+        return $role->accounts()->whereIn($column, $ids)->lists($column);
     }
 }
