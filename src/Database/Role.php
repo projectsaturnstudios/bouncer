@@ -2,9 +2,8 @@
 
 namespace Silber\Bouncer\Database;
 
-use App\User;
 use App\Models\Account;
-
+use App\User;
 use Illuminate\Database\Eloquent\Model;
 use Silber\Bouncer\Database\Constraints\Abilities as AbilitiesConstraint;
 
@@ -28,7 +27,7 @@ class Role extends Model
     }
 
     /**
-     * The abilities relationship.
+     * The role abilities relationship.
      *
      * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany
      */
@@ -37,6 +36,19 @@ class Role extends Model
         return $this->belongsToMany(
             Models::classname(Ability::class),
             Models::table('role_abilities')
+        );
+    }
+
+    /**
+     * The account_abilities relationship.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany
+     */
+    public function account_abilities()
+    {
+        return $this->belongsToMany(
+            Models::classname(Ability::class),
+            Models::table('account_abilities')
         );
     }
 

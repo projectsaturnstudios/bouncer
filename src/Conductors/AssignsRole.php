@@ -27,30 +27,30 @@ class AssignsRole
     }
 
     /**
-     * Assign the role to the given user.
+     * Assign the role to the given user or account.
      *
      * @param  \Illuminate\Database\Eloquent\Model|array|int  $user
      * @return bool
      */
-    public function to($user)
+    public function to($model)
     {
         $role = $this->role();
 
-        if ($user instanceof Model) {
-            $u = $user->getKey();
+        if ($model instanceof Model) {
+            $user = $model->getKey();
         }
 
-        $ids = is_array($u) ? $u : [$u];
-
-        if($user instanceof \App\Models\Account)
+        $ids = is_array($user) ? $user : [$user];
+        if($model instanceof \App\Models\Account)
         {
+            echo "Model is Account\n";
             $this->assignRoleToAccount($role, $ids);
         }
         else
         {
+            echo "Model is User\n";
             $this->assignRole($role, $ids);
         }
-
 
         return true;
     }
@@ -69,8 +69,6 @@ class AssignsRole
         return Models::role()->firstOrCreate(['name' => $this->role]);
     }
 
-
-
     /**
      * Assign the role to the users with the given ids.
      *
@@ -87,14 +85,20 @@ class AssignsRole
         $role->users()->attach($ids);
     }
 
-    protected function assignRoleToAccount($role, $ids)
+    /**
+     * Assign the role to the account with the given ids.
+     *
+     * @param  \Silber\Bouncer\Database\Role  $role
+     * @param  array  $ids
+     * @return void
+     */
+    protected function assignRoleToAccount(Role $role, array $ids)
     {
         $existing = $this->getAccountsWithRole($role, $ids)->all();
 
         $ids = array_diff($ids, $existing);
 
         $role->accounts()->attach($ids);
-        //$role->accounts()->attach($ids);
     }
 
     /**
@@ -113,6 +117,13 @@ class AssignsRole
         return $role->users()->whereIn($column, $ids)->lists($column);
     }
 
+    /**
+     * Get the IDs of the accounts that already have the given role.
+     *
+     * @param  \Silber\Bouncer\Database\Role  $role
+     * @param  array  $ids
+     * @return \Illuminate\Support\Collection
+     */
     protected function getAccountsWithRole(Role $role, array $ids)
     {
         $model = Models::account();

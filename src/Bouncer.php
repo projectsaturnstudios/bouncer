@@ -283,6 +283,16 @@ class Bouncer
     }
 
     /**
+     * Set the model to be used for accounts.
+     *
+     * @param string  $model
+     */
+    public static function useAccountModel($model)
+    {
+        Models::setAccountsModel($model);
+    }
+
+    /**
      * Set custom table names.
      *
      * @param  array  $map

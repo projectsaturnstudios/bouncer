@@ -16,21 +16,26 @@ trait HasAbilities
      *
      * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany
      */
-    public function abilities($accountInsteadOfUser = false)
+    public function abilities()
     {
-        if($accountInsteadOfUser)
-        {
-            return $this->belongsToMany(
-                Models::classname(Ability::class),
-                Models::table('account_abilities'),
-                'account_id'
-            );
-        }
-
         return $this->belongsToMany(
             Models::classname(Ability::class),
             Models::table('user_abilities'),
             'user_id'
+        );
+    }
+
+    /**
+     * The account_abilities relationship.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany
+     */
+    public function account_abilities()
+    {
+        return $this->belongsToMany(
+            Models::classname(Ability::class),
+            Models::table('account_abilities'),
+            'account_id'
         );
     }
 

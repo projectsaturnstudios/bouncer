@@ -2,9 +2,8 @@
 
 namespace Silber\Bouncer\Database;
 
-use App\User;
-
 use App\Models\Account;
+use App\User;
 
 class Models
 {
@@ -53,6 +52,17 @@ class Models
     public static function setUsersModel($model)
     {
         static::$models[User::class] = $model;
+    }
+
+    /**
+     * Set the model to be used for accounts.
+     *
+     * @param  string  $model
+     * @return void
+     */
+    public static function setAccountsModel($model)
+    {
+        static::$models[Account::class] = $model;
     }
 
     /**

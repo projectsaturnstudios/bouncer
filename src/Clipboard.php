@@ -2,6 +2,7 @@
 
 namespace Silber\Bouncer;
 
+use App\Models\Account;
 use Silber\Bouncer\Database\Models;
 
 use Illuminate\Database\Eloquent\Model;
@@ -182,6 +183,11 @@ class Clipboard
      */
     public function getRoles(Model $user)
     {
+        if($user instanceOf Account)
+        {
+            return $user->account_roles()->lists('name');
+        }
+
         return $user->roles()->lists('name');
     }
 

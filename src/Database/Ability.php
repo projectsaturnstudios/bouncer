@@ -2,6 +2,7 @@
 
 namespace Silber\Bouncer\Database;
 
+use App\Models\Account;
 use App\User;
 use Illuminate\Database\Eloquent\Model;
 
@@ -63,6 +64,19 @@ class Ability extends Model
         return $this->belongsToMany(
             Models::classname(User::class),
             Models::table('user_abilities')
+        );
+    }
+
+    /**
+     * The accounts relationship.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany
+     */
+    public function accounts()
+    {
+        return $this->belongsToMany(
+            Models::classname(Account::class),
+            Models::table('account_abilities')
         );
     }
 
